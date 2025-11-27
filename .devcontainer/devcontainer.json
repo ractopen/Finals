@@ -1,0 +1,39 @@
+{
+  "name": "Laravel 12 & SQLite Development",
+  // Use a modern PHP image (8.3 is a strong, stable choice for Laravel 12)
+  "image": "mcr.microsoft.com/devcontainers/php:8.3",
+  "features": {
+    // Install Node.js for frontend assets (Vite/NPM)
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts"
+    },
+    // <--- NEW: SSH Server Feature --->
+    "ghcr.io/devcontainers/features/sshd:1": {
+      "version": "latest"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "bmewburn.vscode-intelephense-client", // PHP IntelliSense
+        "esbenp.prettier-vscode", // Code formatter
+        "onecentlin.laravel5-snippets", // Laravel Snippets
+        "amiralizadeh9480.laravel-artisan" // Run Artisan commands easily
+      ]
+    }
+  },
+  "portsAttributes": {
+    "8000": {
+      "label": "Laravel App",
+      "onAutoForward": "notify"
+    }
+  },
+  // This command runs AFTER the container is created, setting up the environment.
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y sqlite3 libsqlite3-dev && sudo docker-php-ext-install pdo_sqlite && sudo apt-get clean && git config user.email \"ractenopen@gmail.com\" && git config user.name \"ractopen\" && echo 'zend_extension=xdebug' | sudo tee /usr/local/etc/php/conf.d/xdebug.ini > /dev/null && echo 'xdebug.mode=off' | sudo tee -a /usr/local/etc/php/conf.d/xdebug.ini > /dev/null && echo '✅ Environment ready! Now run the following commands manually to set up the project:' && echo '1. composer create-project laravel/laravel BuyMyClassmateECommerceInc' && echo '2. cd BuyMyClassmateECommerceInc' && echo '3. composer require chillerlan/php-qrcode'",
+  // Forward the default Laravel development port
+  "forwardPorts": [
+    8000
+  ],
+  // Set the default working directory to the project root
+  "remoteUser": "vscode"
+}
