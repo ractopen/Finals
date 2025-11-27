@@ -1,59 +1,151 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# BuyMyClassmateInc 🎓
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+An e-commerce platform for buying... classmates? (Just kidding, it's a demo). This project demonstrates a robust Laravel e-commerce architecture with features like partial checkout and role-based access control.
 
-## About Laravel
+## Features
+- **Partial Checkout**: Users can select specific items in their cart to purchase immediately, leaving others for later.
+- **Auth Protection**: "Add to Cart" and "Buy Now" actions are strictly limited to logged-in users. Guests are redirected to login.
+- **Order Tracking**: Detailed timeline for every order.
+- **Admin Panel**: Manage users, products, and order statuses.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Installation
+1.  Clone the repository.
+2.  Run `composer install`.
+3.  Copy `.env.example` to `.env` and configure SQLite.
+4.  Run `php artisan key:generate`.
+5.  Run `php artisan migrate:fresh --seed`.
+6.  Serve with `php artisan serve`.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Admin Credentials
+- **URL**: `/admin/dashboard`
+- **Username**: `admin`
+- **Password**: `12345678`
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+---
 
-## Learning Laravel
+# Technical Architecture 🏗️
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+## 1. Project Structure
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+```text
+BuyMyClassmateInc/
+├── app/
+│   ├── Http/
+│   │   ├── Controllers/
+│   │   │   └── StoreController.php    <-- Contains Partial Checkout Logic
+│   │   └── Middleware/
+│   │       └── IsAdmin.php            <-- Custom Admin Middleware
+├── resources/
+│   └── views/
+│       └── store/
+│           ├── cart.blade.php         <-- Cart with Checkboxes
+│           └── checkout.blade.php     <-- Filtered Checkout View
+└── routes/
+    └── web.php                        <-- Route definitions
+```
 
-## Laravel Sponsors
+## 2. Deep Dive: Partial Checkout Flow
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+This is the core feature of this application. Here is exactly how it works, step-by-step.
 
-### Premium Partners
+### Step 1: Selection (Frontend)
+In `cart.blade.php`, every item has a checkbox.
+```html
+<input type="checkbox" name="selected_items[]" value="{{ $item->id }}" class="item-checkbox">
+```
+We use JavaScript to listen for changes. If no boxes are checked, the "Checkout" button is disabled.
+```javascript
+// cart.blade.php
+function updateCheckoutButton() {
+    const count = document.querySelectorAll('.item-checkbox:checked').length;
+    document.getElementById('checkout-btn').disabled = count === 0;
+}
+```
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+### Step 2: Filtering (Backend)
+When the user clicks Checkout, the form submits an array of IDs: `selected_items = [1, 3]`.
+In `StoreController@checkout`, we use this array to filter the database query.
+```php
+public function checkout(Request $request)
+{
+    $query = CartItem::with('item')->where('user_id', Auth::id());
+    
+    // CRITICAL: Only get items that were checked
+    if ($request->has('selected_items')) {
+        $query->whereIn('id', $request->selected_items);
+    }
 
-## Contributing
+    $cartItems = $query->get();
+    // ... render view ...
+}
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+### Step 3: Processing (Backend)
+When payment is confirmed, we only process the selected items.
+```php
+public function processPayment(Request $request)
+{
+    // 1. Create Order
+    $order = Order::create([...]);
 
-## Code of Conduct
+    // 2. Move ONLY selected items to OrderItems
+    // ... (loop through filtered items) ...
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+    // 3. Delete ONLY selected items from Cart
+    if ($request->has('selected_items')) {
+        CartItem::where('user_id', Auth::id())
+                ->whereIn('id', $request->selected_items)
+                ->delete();
+    }
+    // The unselected items remain in the cart!
+}
+```
 
-## Security Vulnerabilities
+## 3. Sequence Diagram
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```mermaid
+sequenceDiagram
+    participant User
+    participant CartView
+    participant StoreController
+    participant Database
 
-## License
+    User->>CartView: Selects items (Checkboxes)
+    User->>CartView: Clicks "Checkout"
+    CartView->>StoreController: POST /checkout (selected_items[])
+    StoreController->>Database: Query CartItems WHERE id IN selected_items
+    Database-->>StoreController: Return filtered items
+    StoreController-->>User: Show Checkout Page (Filtered)
+    
+    User->>StoreController: POST /payment (Confirm)
+    StoreController->>Database: Create Order
+    StoreController->>Database: Move selected items to OrderItems
+    StoreController->>Database: DELETE selected items from Cart
+    StoreController-->>User: Show Receipt
+```
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+## 4. Middleware & Security
+
+### Custom Admin Middleware
+Unlike the Apple app which uses Gates, this app uses a dedicated Middleware class `IsAdmin`.
+```php
+// app/Http/Middleware/IsAdmin.php
+public function handle(Request $request, Closure $next)
+{
+    if (!Auth::check() || !Auth::user()->is_admin) {
+        abort(403); // Unauthorized
+    }
+    return $next($request);
+}
+```
+This is registered in `bootstrap/app.php` (or `Kernel.php` in older Laravel) and applied to routes in `web.php`.
+
+### Auth Protection
+We strictly enforce login for purchasing actions using Blade directives.
+```blade
+@auth
+    <button onclick="addToCart(...)">Add to Cart</button>
+@else
+    <a href="{{ route('login') }}" class="btn">Login to Buy</a>
+@endauth
+```
